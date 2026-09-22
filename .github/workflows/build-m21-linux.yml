@@ -102,8 +102,13 @@ jobs:
 
       - name: Install & Configure mkbootimg
         run: |
-          git clone https://android.googlesource.com/platform/system/tools/mkbootimg
-          sudo cp mkbootimg/mkbootimg.py /usr/local/bin/mkbootimg
+          git clone --depth 1 https://android.googlesource.com/platform/system/tools/mkbootimg
+          sudo cp -r mkbootimg /opt/mkbootimg
+          cat << 'EOF' | sudo tee /usr/local/bin/mkbootimg
+          #!/bin/bash
+          PYTHONPATH=/opt/mkbootimg python3 /opt/mkbootimg/mkbootimg.py "$@"
+          EOF
+          sudo chmod +x /usr/local/bin/mkbootimg
 
       - name: Build Android Header v2 Boot Image (halium-boot.img)
         run: |
@@ -142,12 +147,10 @@ jobs:
             --cmdline "loop.max_part=7 androidboot.hardware=exynos9611 console=null" \
             -o halium-boot.img
 
-      - name: Fetch and Assemble GNOME / Phosh Rootfs
+      - name: Fetch and Assemble Hardware Adaptation Payload
         run: |
+          echo "Preparing Samsung Galaxy M21 hardware adaptation and kernel boot payload..."
           mkdir -p rootfs_staging
-          echo "Checking for official Droidian Phosh rootfs image..."
-          # Note: Download is optional in CI to allow fast adaptation building
-          curl -sSL -f -o droidian-rootfs.zip "https://github.com/droidian-images/droidian/releases/download/droidian/101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api29-arm64-101.20251130_20251207.zip" || touch rootfs.tar.xz
 
       - name: Package TWRP Sideloadable Installer ZIP
         run: |
