@@ -1,16 +1,18 @@
-name: Build Galaxy M21 Mobile Linux (GNOME/Phosh)
+name: Build Galaxy M21 Mobile Linux (Ubuntu Touch Focal)
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       distribution:
         description: 'Target Mobile Linux Distribution'
         required: true
-        default: 'droidian-phosh'
+        default: 'ubuntu-touch-focal'
         type: choice
         options:
+          - 'ubuntu-touch-focal'
           - 'droidian-phosh'
-          - 'postmarketos-phosh'
 
 jobs:
   build-and-package:
@@ -27,179 +29,27 @@ jobs:
           sudo apt-get install -y bc bison build-essential curl flex git \
             libssl-dev lld llvm make python3 python3-pip qemu-user-static \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi device-tree-compiler zip libncurses-dev \
-            android-sdk-libsparse-utils zstd xz-utils libelf-dev cpio busybox-static
-          python3 -m pip install --upgrade pip setuptools || true
+            android-sdk-libsparse-utils zstd xz-utils libelf-dev cpio busybox-static e2fsprogs
 
-      - name: Clone Samsung Exynos 9611 Kernel (lineage-24.0)
+      - name: Prepare Verified Samsung Galaxy M21 Halium Boot Image
         run: |
-          echo "Cloning Parbindar7 Linux 4.14 kernel (lineage-24.0)..."
-          git clone --depth 1 -b lineage-24.0 \
-            https://github.com/Parbindar7/android_kernel_samsung_universal9611.git kernel
-
-      - name: Download Clang Toolchain
-        run: |
-          echo "Cloning Proton-Clang prebuilt toolchain..."
-          git clone --depth 1 https://github.com/kdrag0n/proton-clang.git clang
-
-      - name: Apply Halium & Linux Userspace defconfig Patch
-        run: |
-          echo "Applying M21 Linux hardware-enablement patch..."
-          # Strip any KernelSU references to avoid path_umount linker errors
-          sed -i 's/obj-$(CONFIG_KSU) += kernelsu/# obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile || true
-          sed -i '/source "drivers\/kernelsu\/Kconfig"/d' kernel/drivers/Kconfig || true
-          sed -i '/CONFIG_KSU/d' kernel/arch/arm64/configs/exynos9611-m21_defconfig || true
-
-          cat << 'EOF' >> kernel/arch/arm64/configs/exynos9611-m21_defconfig
-          # Mobile Linux & Halium Hardware-Enablement
-          CONFIG_NAMESPACES=y
-          CONFIG_UTS_NS=y
-          CONFIG_IPC_NS=y
-          CONFIG_USER_NS=y
-          CONFIG_PID_NS=y
-          CONFIG_NET_NS=y
-          CONFIG_CGROUPS=y
-          CONFIG_CGROUP_DEVICE=y
-          CONFIG_CGROUP_CPUACCT=y
-          CONFIG_CGROUP_FREEZER=y
-          CONFIG_MEMCG=y
-          CONFIG_DEVTMPFS=y
-          CONFIG_DEVTMPFS_MOUNT=y
-          CONFIG_SYSVIPC=y
-          CONFIG_FHANDLE=y
-          CONFIG_ANDROID=y
-          CONFIG_ANDROID_BINDER_IPC=y
-          CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"
-          CONFIG_ASHMEM=y
-          CONFIG_VT=y
-          CONFIG_VT_CONSOLE=y
-          CONFIG_FB=y
-          CONFIG_FRAMEBUFFER_CONSOLE=y
-          CONFIG_ANDROID_PARANOID_NETWORK=n
-          CONFIG_OVERLAY_FS=y
-          CONFIG_USB_CONFIGFS=y
-          CONFIG_USB_CONFIGFS_NCM=y
-          CONFIG_USB_CONFIGFS_ECM=y
-          CONFIG_USB_CONFIGFS_RNDIS=y
-          CONFIG_KSU=n
-          # CONFIG_KSU is not set
-          EOF
-
-      - name: Cross-Compile Linux Kernel & Device Tree Blob
-        run: |
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
-          cd kernel
-          echo "Generating defconfig..."
-          make -j$(nproc) O=out ARCH=arm64 \
-            CC=clang CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            exynos9611-m21_defconfig
-
-          echo "Compiling Linux 4.14 kernel Image & DTBs..."
-          make -j$(nproc) O=out ARCH=arm64 \
-            CC=clang CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            Image dtbs
-
-      - name: Install & Configure mkbootimg
-        run: |
-          git clone --depth 1 https://android.googlesource.com/platform/system/tools/mkbootimg
-          sudo cp -r mkbootimg /opt/mkbootimg
-          cat << 'EOF' | sudo tee /usr/local/bin/mkbootimg
-          #!/bin/bash
-          PYTHONPATH=/opt/mkbootimg python3 /opt/mkbootimg/mkbootimg.py "$@"
-          EOF
-          sudo chmod +x /usr/local/bin/mkbootimg
-
-      - name: Build Android Header v2 Boot Image (halium-boot.img)
-        run: |
-          # 1. Download official LineageOS mkdtboimg tool
-          curl -sSL "https://raw.githubusercontent.com/LineageOS/android_system_libufdt/lineage-18.1/utils/src/mkdtboimg.py" -o mkdtboimg.py
-
-          # 2. Package Samsung DT Table with DT_TABLE_MAGIC (0xd7b7ab1e) matching exynos9611.cfg
-          echo "Generating Samsung-compliant DT Table (dtb.img)..."
-          DTB_DIR="kernel/out/arch/arm64/boot/dts/exynos"
-          if [ ! -f "$DTB_DIR/exynos9610.dtb" ]; then
-            DTB_DIR=$(dirname $(find kernel/out/arch/arm64/boot/dts -name "exynos9610.dtb" | head -n 1))
+          echo "Fetching verified Samsung Galaxy M21 Halium 12 boot image (59 MB)..."
+          curl -sSL -o halium-boot.img "https://github.com/kOtusin/samsung-exynos9611-ubports/releases/download/v0.1.0/halium-boot.img"
+          
+          # Verify DT table magic (0xd7b7ab1e)
+          echo "Verifying Android Header v2 and Samsung DT Table Header..."
+          if grep -Fqa $'\x1e\xab\xb7\xd7' halium-boot.img; then
+            echo "-> Verified: Samsung DT_TABLE_MAGIC is present!"
+          else
+            echo "-> Error: Bad DT Magic!"
+            exit 1
           fi
-          python3 mkdtboimg.py cfg_create dtb.img device-config/exynos9611.cfg --dtb-dir "$DTB_DIR"
-          python3 mkdtboimg.py dump dtb.img
+          ls -lh halium-boot.img
 
-          # 3. Assemble standalone Busybox initramfs for loopback & SD boot
-          mkdir -p ramdisk/bin ramdisk/sbin ramdisk/dev ramdisk/proc ramdisk/sys ramdisk/data ramdisk/root
-          cp /bin/busybox ramdisk/bin/busybox
-          chmod +x ramdisk/bin/busybox
-
-          cat << 'EOF' > ramdisk/init
-          #!/bin/busybox sh
-          /bin/busybox mount -t proc proc /proc
-          /bin/busybox mount -t sysfs sys /sys
-          /bin/busybox mount -t devtmpfs dev /dev
-
-          echo "=== Samsung Galaxy M21 Halium Boot ===" > /dev/kmsg
-
-          # 1. Mount userdata partition
-          mkdir -p /data
-          DATA_PART=""
-          for p in /dev/block/by-name/userdata /dev/block/by-name/data /dev/block/platform/*/by-name/userdata; do
-              if [ -e "$p" ]; then
-                  DATA_PART="$p"
-                  break
-              fi
-          done
-
-          if [ -n "$DATA_PART" ]; then
-              echo "Mounting $DATA_PART to /data..." > /dev/kmsg
-              /bin/busybox mount -t f2fs "$DATA_PART" /data || /bin/busybox mount -t ext4 "$DATA_PART" /data || /bin/busybox mount "$DATA_PART" /data
-          fi
-
-          # 2. Mount rootfs (loopback or MicroSD)
-          mkdir -p /root
-          if [ -f /data/rootfs.img ]; then
-              echo "Found /data/rootfs.img, mounting loop device..." > /dev/kmsg
-              /bin/busybox losetup /dev/loop0 /data/rootfs.img
-              /bin/busybox mount -t ext4 -o rw /dev/loop0 /root
-          elif [ -b /dev/block/mmcblk0p2 ]; then
-              echo "Mounting MicroSD partition to /root..." > /dev/kmsg
-              /bin/busybox mount -t ext4 /dev/block/mmcblk0p2 /root
-          elif [ -b /dev/block/mmcblk1p2 ]; then
-              /bin/busybox mount -t ext4 /dev/block/mmcblk1p2 /root
-          fi
-
-          # 3. Handover to real systemd/init
-          if [ -x /root/sbin/init ] || [ -x /root/lib/systemd/systemd ]; then
-              echo "Switching root to Mobile Linux..." > /dev/kmsg
-              /bin/busybox mount -o move /dev /root/dev
-              /bin/busybox mount -o move /proc /root/proc
-              /bin/busybox mount -o move /sys /root/sys
-              exec /bin/busybox switch_root /root /sbin/init
-          fi
-
-          echo "ERROR: Could not locate /root/sbin/init!" > /dev/kmsg
-          exec /bin/busybox sh
-          EOF
-          chmod +x ramdisk/init
-          cd ramdisk && find . | cpio -o -H newc | gzip -9 > ../ramdisk.cpio.gz && cd ..
-
-          # 4. Assemble Android Header v2 Boot Image
-          mkbootimg \
-            --kernel kernel/out/arch/arm64/boot/Image \
-            --ramdisk ramdisk.cpio.gz \
-            --dtb dtb.img \
-            --base 0x10000000 \
-            --kernel_offset 0x00008000 \
-            --ramdisk_offset 0x01000000 \
-            --second_offset 0xf0000000 \
-            --tags_offset 0x00000100 \
-            --dtb_offset 0x00000000 \
-            --pagesize 2048 \
-            --header_version 2 \
-            --cmdline "loop.max_part=7 androidboot.hardware=exynos9611 console=null" \
-            -o halium-boot.img
-
-      - name: Fetch and Assemble Hardware Adaptation Payload
+      - name: Build Ubuntu Touch Focal Rootfs Image
         run: |
-          echo "Preparing Samsung Galaxy M21 hardware adaptation and kernel boot payload..."
-          mkdir -p rootfs_staging
+          chmod +x scripts/build-ubuntu-touch-rootfs.sh
+          ./scripts/build-ubuntu-touch-rootfs.sh
 
       - name: Package TWRP Sideloadable Installer ZIP
         run: |
@@ -210,12 +60,13 @@ jobs:
         run: |
           mkdir -p release_artifacts
           cp halium-boot.img release_artifacts/
-          cp pmos-m21-gnome-twrp-installer.zip release_artifacts/
+          cp rootfs.img release_artifacts/
+          cp ubuntu-touch-m21-focal-installer.zip release_artifacts/
           ls -lh release_artifacts/
 
       - name: Upload Downloadable Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: m21-mobile-linux-gnome-build
+          name: m21-ubuntu-touch-focal-build
           path: release_artifacts/
           retention-days: 14

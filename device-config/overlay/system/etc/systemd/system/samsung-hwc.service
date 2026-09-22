@@ -1,0 +1,15 @@
+[Unit]
+Description=Samsung Exynos 9611 HWC and Audio Compatibility Service
+Before=phosh.service lomiri.service
+After=lxc@android.service
+Wants=lxc@android.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sleep 3
+ExecStart=/bin/mount -o bind /dev/null /vendor/lib64/hw/hwcomposer.exynos9611.so
+ExecStartPost=-/bin/sh -c "if [ -f /system/lib64/hw/audio.hidl_compat.default.so ]; then mount -o bind /system/lib64/hw/audio.hidl_compat.default.so /vendor/lib64/hw/audio.primary.default.so; fi"
+
+[Install]
+WantedBy=graphical.target

@@ -1,0 +1,3 @@
+Package: linux-image-* flash-kernel droidian-adaptation-*
+Pin: release *
+Pin-Priority: -1

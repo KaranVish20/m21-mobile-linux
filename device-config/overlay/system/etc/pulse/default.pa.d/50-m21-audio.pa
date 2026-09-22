@@ -1,0 +1,4 @@
+# Galaxy M21 Halium Audio Routing
+.nofail
+load-module module-droid-card-hidl rate=48000 hw_volume=false
+.fail

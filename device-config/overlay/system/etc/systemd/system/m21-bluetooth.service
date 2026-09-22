@@ -1,0 +1,12 @@
+[Unit]
+Description=Samsung Galaxy M21 Bluetooth UART Initialization
+Before=bluetooth.service
+After=lxc@android.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "if [ -e /dev/ttySAC1 ]; then /usr/bin/hciattach -s 3000000 /dev/ttySAC1 bcm43xx 3000000 flow || true; fi"
+
+[Install]
+WantedBy=multi-user.target
