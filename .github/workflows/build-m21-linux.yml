@@ -27,7 +27,7 @@ jobs:
           sudo apt-get install -y bc bison build-essential curl flex git \
             libssl-dev lld llvm make python3 python3-pip qemu-user-static \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi device-tree-compiler zip libncurses-dev \
-            android-sdk-libsparse-utils zstd xz-utils libelf-dev cpio
+            android-sdk-libsparse-utils zstd xz-utils libelf-dev cpio busybox-static
           python3 -m pip install --upgrade pip setuptools || true
 
       - name: Clone Samsung Exynos 9611 Kernel (lineage-24.0)
@@ -112,30 +112,79 @@ jobs:
 
       - name: Build Android Header v2 Boot Image (halium-boot.img)
         run: |
-          mkdir -p ramdisk
+          # 1. Download official LineageOS mkdtboimg tool
+          curl -sSL "https://raw.githubusercontent.com/LineageOS/android_system_libufdt/lineage-18.1/utils/src/mkdtboimg.py" -o mkdtboimg.py
+
+          # 2. Package Samsung DT Table with DT_TABLE_MAGIC (0xd7b7ab1e) matching exynos9611.cfg
+          echo "Generating Samsung-compliant DT Table (dtb.img)..."
+          DTB_DIR="kernel/out/arch/arm64/boot/dts/exynos"
+          if [ ! -f "$DTB_DIR/exynos9610.dtb" ]; then
+            DTB_DIR=$(dirname $(find kernel/out/arch/arm64/boot/dts -name "exynos9610.dtb" | head -n 1))
+          fi
+          python3 mkdtboimg.py cfg_create dtb.img device-config/exynos9611.cfg --dtb-dir "$DTB_DIR"
+          python3 mkdtboimg.py dump dtb.img
+
+          # 3. Assemble standalone Busybox initramfs for loopback & SD boot
+          mkdir -p ramdisk/bin ramdisk/sbin ramdisk/dev ramdisk/proc ramdisk/sys ramdisk/data ramdisk/root
+          cp /bin/busybox ramdisk/bin/busybox
+          chmod +x ramdisk/bin/busybox
+
           cat << 'EOF' > ramdisk/init
-          #!/bin/sh
-          mount -t proc proc /proc
-          mount -t sysfs sys /sys
-          mount -t devtmpfs dev /dev
-          echo 172.16.42.1 > /dev/null
-          exec /sbin/init
+          #!/bin/busybox sh
+          /bin/busybox mount -t proc proc /proc
+          /bin/busybox mount -t sysfs sys /sys
+          /bin/busybox mount -t devtmpfs dev /dev
+
+          echo "=== Samsung Galaxy M21 Halium Boot ===" > /dev/kmsg
+
+          # 1. Mount userdata partition
+          mkdir -p /data
+          DATA_PART=""
+          for p in /dev/block/by-name/userdata /dev/block/by-name/data /dev/block/platform/*/by-name/userdata; do
+              if [ -e "$p" ]; then
+                  DATA_PART="$p"
+                  break
+              fi
+          done
+
+          if [ -n "$DATA_PART" ]; then
+              echo "Mounting $DATA_PART to /data..." > /dev/kmsg
+              /bin/busybox mount -t f2fs "$DATA_PART" /data || /bin/busybox mount -t ext4 "$DATA_PART" /data || /bin/busybox mount "$DATA_PART" /data
+          fi
+
+          # 2. Mount rootfs (loopback or MicroSD)
+          mkdir -p /root
+          if [ -f /data/rootfs.img ]; then
+              echo "Found /data/rootfs.img, mounting loop device..." > /dev/kmsg
+              /bin/busybox losetup /dev/loop0 /data/rootfs.img
+              /bin/busybox mount -t ext4 -o rw /dev/loop0 /root
+          elif [ -b /dev/block/mmcblk0p2 ]; then
+              echo "Mounting MicroSD partition to /root..." > /dev/kmsg
+              /bin/busybox mount -t ext4 /dev/block/mmcblk0p2 /root
+          elif [ -b /dev/block/mmcblk1p2 ]; then
+              /bin/busybox mount -t ext4 /dev/block/mmcblk1p2 /root
+          fi
+
+          # 3. Handover to real systemd/init
+          if [ -x /root/sbin/init ] || [ -x /root/lib/systemd/systemd ]; then
+              echo "Switching root to Mobile Linux..." > /dev/kmsg
+              /bin/busybox mount -o move /dev /root/dev
+              /bin/busybox mount -o move /proc /root/proc
+              /bin/busybox mount -o move /sys /root/sys
+              exec /bin/busybox switch_root /root /sbin/init
+          fi
+
+          echo "ERROR: Could not locate /root/sbin/init!" > /dev/kmsg
+          exec /bin/busybox sh
           EOF
           chmod +x ramdisk/init
           cd ramdisk && find . | cpio -o -H newc | gzip -9 > ../ramdisk.cpio.gz && cd ..
 
-          # Locate base DTB for Exynos 9611
-          DTB_PATH="kernel/out/arch/arm64/boot/dts/exynos/exynos9610.dtb"
-          if [ ! -f "$DTB_PATH" ]; then
-            DTB_PATH=$(find kernel/out/arch/arm64/boot/dts -name "*.dtb" | head -n 1)
-          fi
-          echo "Selected DTB for boot image: $DTB_PATH"
-
-          # Assemble header v2 boot image matching M21 BoardConfig offsets
+          # 4. Assemble Android Header v2 Boot Image
           mkbootimg \
             --kernel kernel/out/arch/arm64/boot/Image \
             --ramdisk ramdisk.cpio.gz \
-            --dtb "$DTB_PATH" \
+            --dtb dtb.img \
             --base 0x10000000 \
             --kernel_offset 0x00008000 \
             --ramdisk_offset 0x01000000 \
