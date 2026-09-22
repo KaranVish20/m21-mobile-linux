@@ -32,8 +32,8 @@ jobs:
 
       - name: Clone Samsung Exynos 9611 Kernel (lineage-24.0-KSUN)
         run: |
-          echo "Cloning Parbindar7 Linux 4.14 kernel..."
-          git clone --depth 1 -b lineage-24.0-KSUN \
+          echo "Cloning Parbindar7 Linux 4.14 kernel with submodules..."
+          git clone --depth 1 --recurse-submodules --shallow-submodules -b lineage-24.0-KSUN \
             https://github.com/Parbindar7/android_kernel_samsung_universal9611.git kernel
 
       - name: Download Clang Toolchain
