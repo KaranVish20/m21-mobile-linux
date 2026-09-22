@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential curl flex git \
             libssl-dev lld llvm make python3 python3-pip qemu-user-static \
-            gcc-aarch64-linux-gnu device-tree-compiler zip libncurses-dev \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi device-tree-compiler zip libncurses-dev \
             android-sdk-libsparse-utils zstd xz-utils libelf-dev cpio
           python3 -m pip install --upgrade pip setuptools || true
 
@@ -36,11 +36,10 @@ jobs:
           git clone --depth 1 -b lineage-24.0-KSUN \
             https://github.com/Parbindar7/android_kernel_samsung_universal9611.git kernel
 
-      - name: Download AOSP Clang Toolchain
+      - name: Download Clang Toolchain
         run: |
-          echo "Downloading Google prebuilt AOSP Clang toolchain..."
-          mkdir -p clang
-          curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz" | tar -xz -C clang
+          echo "Cloning Proton-Clang prebuilt toolchain..."
+          git clone --depth 1 https://github.com/kdrag0n/proton-clang.git clang
 
       - name: Apply Halium & Linux Userspace defconfig Patch
         run: |
