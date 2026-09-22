@@ -7,3 +7,4 @@ release_artifacts/
 *.zip
 *.tar.xz
 *.cpio.gz
+dist/
