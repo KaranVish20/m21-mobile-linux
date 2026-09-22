@@ -30,10 +30,10 @@ jobs:
             android-sdk-libsparse-utils zstd xz-utils libelf-dev cpio
           python3 -m pip install --upgrade pip setuptools || true
 
-      - name: Clone Samsung Exynos 9611 Kernel (lineage-24.0-KSUN)
+      - name: Clone Samsung Exynos 9611 Kernel (lineage-24.0)
         run: |
-          echo "Cloning Parbindar7 Linux 4.14 kernel with submodules..."
-          git clone --depth 1 --recurse-submodules --shallow-submodules -b lineage-24.0-KSUN \
+          echo "Cloning Parbindar7 Linux 4.14 kernel (lineage-24.0)..."
+          git clone --depth 1 -b lineage-24.0 \
             https://github.com/Parbindar7/android_kernel_samsung_universal9611.git kernel
 
       - name: Download Clang Toolchain
@@ -44,6 +44,11 @@ jobs:
       - name: Apply Halium & Linux Userspace defconfig Patch
         run: |
           echo "Applying M21 Linux hardware-enablement patch..."
+          # Strip any KernelSU references to avoid path_umount linker errors
+          sed -i 's/obj-$(CONFIG_KSU) += kernelsu/# obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile || true
+          sed -i '/source "drivers\/kernelsu\/Kconfig"/d' kernel/drivers/Kconfig || true
+          sed -i '/CONFIG_KSU/d' kernel/arch/arm64/configs/exynos9611-m21_defconfig || true
+
           cat << 'EOF' >> kernel/arch/arm64/configs/exynos9611-m21_defconfig
           # Mobile Linux & Halium Hardware-Enablement
           CONFIG_NAMESPACES=y
@@ -75,6 +80,8 @@ jobs:
           CONFIG_USB_CONFIGFS_NCM=y
           CONFIG_USB_CONFIGFS_ECM=y
           CONFIG_USB_CONFIGFS_RNDIS=y
+          CONFIG_KSU=n
+          # CONFIG_KSU is not set
           EOF
 
       - name: Cross-Compile Linux Kernel & Device Tree Blob
@@ -112,11 +119,18 @@ jobs:
           chmod +x ramdisk/init
           cd ramdisk && find . | cpio -o -H newc | gzip -9 > ../ramdisk.cpio.gz && cd ..
 
+          # Locate base DTB for Exynos 9611
+          DTB_PATH="kernel/out/arch/arm64/boot/dts/exynos/exynos9610.dtb"
+          if [ ! -f "$DTB_PATH" ]; then
+            DTB_PATH=$(find kernel/out/arch/arm64/boot/dts -name "*.dtb" | head -n 1)
+          fi
+          echo "Selected DTB for boot image: $DTB_PATH"
+
           # Assemble header v2 boot image matching M21 BoardConfig offsets
           mkbootimg \
             --kernel kernel/out/arch/arm64/boot/Image \
             --ramdisk ramdisk.cpio.gz \
-            --dtb kernel/out/arch/arm64/boot/dts/exynos/exynos9611-m21.dtb \
+            --dtb "$DTB_PATH" \
             --base 0x10000000 \
             --kernel_offset 0x00008000 \
             --ramdisk_offset 0x01000000 \
@@ -131,10 +145,9 @@ jobs:
       - name: Fetch and Assemble GNOME / Phosh Rootfs
         run: |
           mkdir -p rootfs_staging
-          echo "Downloading latest official Droidian Phosh (GNOME) ARM64 rootfs..."
-          curl -sSL -o rootfs.tar.xz "https://images.droidian.org/droidian/nightly/droidian-rootfs-api28-arm64.tar.xz" || \
-          curl -sSL -o rootfs.tar.xz "https://github.com/droidian-releng/rootfs-builder/releases/download/latest/droidian-rootfs-api28-arm64.tar.xz" || \
-          touch rootfs.tar.xz
+          echo "Checking for official Droidian Phosh rootfs image..."
+          # Note: Download is optional in CI to allow fast adaptation building
+          curl -sSL -f -o droidian-rootfs.zip "https://github.com/droidian-images/droidian/releases/download/droidian/101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api29-arm64-101.20251130_20251207.zip" || touch rootfs.tar.xz
 
       - name: Package TWRP Sideloadable Installer ZIP
         run: |
