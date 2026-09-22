@@ -1,0 +1,31 @@
+# Udev rules for Samsung Galaxy M21 (SM-M215F)
+# Ensures non-root access for Wayland, Audio, Modem, and Sensors
+
+# Touchscreen (Samsung Touchscreen sec_ts)
+KERNEL=="event*", ATTRS{name}=="sec_ts", SYMLINK+="input/touchscreen0", MODE="0660", GROUP="input"
+KERNEL=="event*", ATTRS{name}=="sec_e-pen*", SYMLINK+="input/pen0", MODE="0660", GROUP="input"
+
+# ARM Mali-G72 GPU permissions
+KERNEL=="mali0", MODE="0666", GROUP="video"
+
+# Display backlight control
+SUBSYSTEM=="backlight", ACTION=="add", RUN+="/bin/chgrp video %S%p/brightness", RUN+="/bin/chmod 0664 %S%p/brightness"
+SUBSYSTEM=="leds", ACTION=="add", RUN+="/bin/chgrp video %S%p/brightness", RUN+="/bin/chmod 0664 %S%p/brightness"
+
+# Shannon Modem IPC nodes (for cbd baseband daemon and rild)
+KERNEL=="umts_boot0", MODE="0660", GROUP="dialout"
+KERNEL=="umts_ipc0", MODE="0660", GROUP="dialout"
+KERNEL=="umts_rfs0", MODE="0660", GROUP="dialout"
+KERNEL=="mipi-lli*", MODE="0660", GROUP="dialout"
+
+# Android Binder nodes for libhybris
+KERNEL=="binder", MODE="0666"
+KERNEL=="hwbinder", MODE="0666"
+KERNEL=="vndbinder", MODE="0666"
+KERNEL=="ashmem", MODE="0666"
+
+# Audio ALSA devices
+SUBSYSTEM=="sound", MODE="0660", GROUP="audio"
+KERNEL=="controlC*", MODE="0660", GROUP="audio"
+KERNEL=="pcmC*D*p", MODE="0660", GROUP="audio"
+KERNEL=="pcmC*D*c", MODE="0660", GROUP="audio"

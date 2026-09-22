@@ -1,0 +1,38 @@
+# Droidian / Halium Hardware Adaptation for Samsung Galaxy M21
+device:
+  pretty_name: "Samsung Galaxy M21"
+  codename: "m21"
+  vendor: "samsung"
+  soc: "universal9611"
+  architecture: "arm64"
+
+display:
+  width: 1080
+  height: 2400
+  grid_unit: 18
+  scaling: 2.25
+  orientation: "portrait"
+  backlight_type: "sysfs"
+  backlight_path: "/sys/class/backlight/panel"
+
+input:
+  touchscreen: "/dev/input/event2"
+  proximity: "/dev/input/event3"
+
+audio:
+  driver: "droid"
+  module: "module-droid-sink"
+  primary_hal: "audio.primary.exynos9611.so"
+  output_sample_rate: 48000
+  channels: 2
+
+telephony:
+  daemon: "ofono"
+  modem_type: "samsung_sipc"
+  rild_socket: "/dev/socket/rild"
+
+graphics:
+  driver: "hwcomposer"
+  hwcomposer_version: "2.0"
+  hwcomposer_hal: "hwcomposer.exynos9611.so"
+  egl_platform: "libhybris"

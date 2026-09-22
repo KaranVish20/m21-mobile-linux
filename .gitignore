@@ -1,0 +1,9 @@
+kernel/
+clang/
+out/
+out_twrp_zip/
+release_artifacts/
+*.img
+*.zip
+*.tar.xz
+*.cpio.gz

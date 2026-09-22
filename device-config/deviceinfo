@@ -1,0 +1,36 @@
+# Device definition for Samsung Galaxy M21 (SM-M215F)
+# Reverse-engineered from Parbindar7 BoardConfigCommon.mk and lineage_m21.mk
+
+deviceinfo_format_version="0"
+deviceinfo_name="Samsung Galaxy M21"
+deviceinfo_manufacturer="Samsung"
+deviceinfo_codename="samsung-m21"
+deviceinfo_year="2020"
+deviceinfo_arch="aarch64"
+
+# Android Boot Image Architecture (Header Version 2)
+deviceinfo_boot_img="true"
+deviceinfo_flash_method="heimdall"
+deviceinfo_generate_bootimg="true"
+deviceinfo_header_version="2"
+deviceinfo_pagesize="2048"
+deviceinfo_kernel_base="0x10000000"
+deviceinfo_kernel_offset="0x00008000"
+deviceinfo_ramdisk_offset="0x01000000"
+deviceinfo_second_offset="0xf0000000"
+deviceinfo_tags_offset="0x00000100"
+deviceinfo_dtb_offset="0x00000000"
+deviceinfo_bootimg_dtb="true"
+deviceinfo_bootimg_qcdt="false"
+deviceinfo_kernel_cmdline="loop.max_part=7 androidboot.hardware=exynos9611 console=null"
+
+# Screen Geometry (FHD+ Super AMOLED)
+deviceinfo_screen_width="1080"
+deviceinfo_screen_height="2400"
+
+# Hardware Interfaces
+deviceinfo_dev_touchscreen="/dev/input/event2"
+deviceinfo_gpu="mali-g72"
+deviceinfo_modem="shannon_sipc"
+deviceinfo_usb_gadget="dwc3"
+deviceinfo_audio_hal="audio.primary.exynos9611.so"
