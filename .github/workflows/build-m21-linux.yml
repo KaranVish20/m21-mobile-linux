@@ -36,14 +36,9 @@ jobs:
           echo "Fetching verified Samsung Galaxy M21 Halium 12 boot image (59 MB)..."
           curl -sSL -o halium-boot.img "https://github.com/kOtusin/samsung-exynos9611-ubports/releases/download/v0.1.0/halium-boot.img"
           
-          # Verify DT table magic (0xd7b7ab1e)
+          # Verify DT table magic (0xd7b7ab1e) using Python
           echo "Verifying Android Header v2 and Samsung DT Table Header..."
-          if grep -Fqa $'\x1e\xab\xb7\xd7' halium-boot.img; then
-            echo "-> Verified: Samsung DT_TABLE_MAGIC is present!"
-          else
-            echo "-> Error: Bad DT Magic!"
-            exit 1
-          fi
+          python3 -c "data = open('halium-boot.img', 'rb').read(); assert b'\xd7\xb7\xab\x1e' in data; print('-> Verified: Samsung DT_TABLE_MAGIC (0xd7b7ab1e) present at byte offset', data.find(b'\xd7\xb7\xab\x1e'))"
           ls -lh halium-boot.img
 
       - name: Build Ubuntu Touch Focal Rootfs Image

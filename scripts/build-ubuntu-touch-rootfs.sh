@@ -10,7 +10,7 @@ ROOTFS_URL="https://ci.ubports.com/job/ubuntu-touch-rootfs/job/ubports%252Ffocal
 HALIUM_GENERIC_URL="https://ci.ubports.com/job/UBportsCommunityPortsJenkinsCI/job/ubports%252Fporting%252Fcommunity-ports%252Fjenkins-ci%252Fgeneric_arm64/job/halium-12.0/lastSuccessfulBuild/artifact/halium_halium_arm64.tar.xz"
 
 WORK_DIR="build_ut"
-rm -rf "$WORK_DIR"
+sudo rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR/rootfs"
 cd "$WORK_DIR"
 
@@ -21,22 +21,26 @@ curl -sSL -o rootfs.tar.gz "$ROOTFS_URL"
 echo "-> [2/5] Downloading Halium 12 generic adaptation layer..."
 curl -sSL -o halium_arm64.tar.xz "$HALIUM_GENERIC_URL"
 
-# 2. Extract components
-echo "-> [3/5] Extracting rootfs and Halium generic layer..."
-tar -xzf rootfs.tar.gz -C rootfs/
-tar -xJf halium_arm64.tar.xz -C rootfs/
+# 2. Extract components with preserved permissions
+echo "-> [3/5] Extracting rootfs and Halium generic layer with root ownership..."
+sudo tar --numeric-owner -xzf rootfs.tar.gz -C rootfs/
+sudo tar --numeric-owner -xJf halium_arm64.tar.xz -C rootfs/
 
 # 3. Apply Samsung Galaxy M21 Exynos 9611 Adaptation & Fixes
 echo "-> [4/5] Injecting Samsung Exynos 9611 adaptation and hardware fixes..."
 if [ -d "../device-config/overlay/system" ]; then
-    cp -r ../device-config/overlay/system/* rootfs/
+    sudo cp -r ../device-config/overlay/system/* rootfs/
 fi
 
 # Enable systemd services
-mkdir -p rootfs/etc/systemd/system/multi-user.target.wants/
-mkdir -p rootfs/etc/systemd/system/graphical.target.wants/
-ln -sf /etc/systemd/system/samsung-hwc.service rootfs/etc/systemd/system/graphical.target.wants/samsung-hwc.service || true
-ln -sf /etc/systemd/system/m21-bluetooth.service rootfs/etc/systemd/system/multi-user.target.wants/m21-bluetooth.service || true
+sudo mkdir -p rootfs/etc/systemd/system/multi-user.target.wants/
+sudo mkdir -p rootfs/etc/systemd/system/graphical.target.wants/
+sudo ln -sf /etc/systemd/system/samsung-hwc.service rootfs/etc/systemd/system/graphical.target.wants/samsung-hwc.service || true
+sudo ln -sf /etc/systemd/system/m21-bluetooth.service rootfs/etc/systemd/system/multi-user.target.wants/m21-bluetooth.service || true
+
+# Set correct permissions
+sudo chown -R 0:0 rootfs/etc/
+sudo chown -R 0:0 rootfs/usr/
 
 # 4. Generate ext4 rootfs.img
 echo "-> [5/5] Generating ext4 filesystem image (rootfs.img)..."
